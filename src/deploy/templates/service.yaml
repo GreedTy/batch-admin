@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-{{ .Values.Common.ServiceName}}
+  namespace: {{ .Values.Common.Namespace }}
+spec:
+  type: {{ .Values.Service.type }}
+  ports:
+    - port: {{ .Values.Service.port }}
+      targetPort: 9393
+      protocol: TCP
+  selector:
+    {{- include "deploy.selectorLabels" . | nindent 4 }}

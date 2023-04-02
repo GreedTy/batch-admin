@@ -1,0 +1,93 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: deployment-{{ .Values.Deployment.name }}
+  namespace: batch-admin
+  labels:
+    tags.datadoghq.com/env: {{ .Values.deployEnv }}
+    tags.datadoghq.com/service: {{ .Values.Common.ServiceName }}
+    tags.datadoghq.com/version: {{ .Values.deployVersion }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.Pod.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "deploy.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        tags.datadoghq.com/env: {{ .Values.deployEnv }}
+        tags.datadoghq.com/service: {{ .Values.Common.ServiceName }}
+        tags.datadoghq.com/version: {{ .Values.deployVersion }}
+        {{- include "deploy.selectorLabels" . | nindent 8 }}
+      annotations:
+        ad.datadoghq.com/tags: '{"env": "{{ .Values.deployEnv }}"}'
+        ad.datadoghq.com/{{ .Values.Common.ServiceName }}.logs: >-
+          [{
+            "service": "{{ .Values.Common.ServiceName }}" ,
+            "log_processing_rules": [{
+              "type": "multi_line",
+              "name": "log_start_with_date",
+              "pattern": "^\\[[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}Z\\]"
+            }]
+          }]
+    spec:
+      serviceAccountName: {{ .Values.ServiceAccount.name }}
+      volumes:
+        - name: config
+          configMap:
+            name: scdf-server
+            items:
+              - key: application.yaml
+                path: application.yaml
+      containers:
+        - name: {{ .Values.Deployment.name }}
+          image: {{ .Values.ImageName }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          volumeMounts:
+            - name: config
+              mountPath: /config
+              readOnly: true
+          ports:
+          - name: http
+            containerPort: 9393
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: {{ .Values.ConfigMap.name }}
+            - secretRef:
+                name: {{ .Values.Secret.name }}
+          env:
+            - name: JVM_OPTS
+              value: >-
+                -server -XX:InitialRAMPercentage=50.0
+                -XX:MaxRAMPercentage=75.0
+                -Dnetworkaddress.cache.ttl=30
+                -javaagent:/data/dd-java-agent.jar
+            # Datadog APM Configurations
+            - name: DD_SERVICE_MAPPING
+              value: >-
+                java-aws-sdk: {{ .Values.Common.ServiceName }}
+                mysql: {{ .Values.deployEnv }}-{{ .Values.awsProfile }}-{{ .Values.auroraTag }}
+            - name: DD_ENV
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['tags.datadoghq.com/env']
+            - name: DD_SERVICE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['tags.datadoghq.com/service']
+            - name: DD_VERSION
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['tags.datadoghq.com/version']
+            - name: DD_PROFILING_ENABLED
+              value: "true"
+            - name: DD_LOGS_INJECTION
+              value: "true"
+            - name: DD_TRACE_SAMPLE_RATE
+              value: "1"
+            - name: SPRING_CLOUD_DATAFLOW_SERVER_URI
+              value: {{ .Values.domain }}

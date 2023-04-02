@@ -1,0 +1,6 @@
+kubernetes:
+  management:
+    metrics:
+      tags:
+        application: ${spring.cloud.task.name:unknown}-${spring.cloud.task.executionid:unknown}
+        service: "task-application"

@@ -1,0 +1,59 @@
+deployEnv: dev
+deployVersion: "v1.0.0"
+ddTraceLibVersion: v0.114.0
+awsProfile: batch
+auroraTag: aurora
+domain: https://micro.my.commerce.dev/batch/micro-service
+
+Common:
+  ServiceName: batch-admin-bo
+  Namespace: batch-admin
+  Configmap:
+    SpringProfilesActive: dev
+
+Ingress:
+  IngressClassName: nginx-api
+  port: 80
+
+Service:
+  type: ClusterIP
+  port: 80
+
+Deployment:
+  name: batch-admin-bo
+
+Pod:
+  replicaCount: 1
+
+image:
+  pullPolicy: IfNotPresent
+
+ServiceAccount:
+  name: scdf-sa
+
+ClusterRole:
+  name: scdf-cluster-role
+
+Role:
+  name: scdf-role
+
+ConfigMap:
+  name: scdf-server
+
+Secret:
+  name: scdf-secret
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 1Gi
+  limits:
+    cpu: 2
+    memory: 2Gi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 100
+  targetCPUUtilizationPercentage: 80
+

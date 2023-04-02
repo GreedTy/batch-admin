@@ -1,0 +1,234 @@
+info:
+  app:
+    name: "scdf"
+    description: "Spring Cloud Data Flow Server"
+    version: "2.10.0-SNAPSHOT"
+
+admin:
+  username: ${DATAFLOW_ADMIN_USERNAME:}
+  password: ${DATAFLOW_ADMIN_PASSWORD:}
+
+server:
+  error:
+    include-message: always
+  servlet:
+    context-path: "/batch/micro-service"
+
+spring:
+  config:
+    activate:
+      on-cloud-platform: kubernetes
+  autoconfigure:
+    exclude: org.springframework.boot.autoconfigure.session.SessionAutoConfiguration
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: https://${OAUTH_AUTHORIZATION_SERVER_URI:}/protocol/openid-connect
+          jwk-set-uri: https://${OAUTH_AUTHORIZATION_SERVER_URI:}/protocol/openid-connect/certs
+      client:
+        registration:
+          dataflow:
+            client-id: ${DATAFLOW_CLIENT_ID:}
+            client-secret: ${DATAFLOW_CLIENT_SECRET:}
+            authorization-grant-type: password
+            provider: keycloak
+        provider:
+          keycloak:
+            token-uri: https://${OAUTH_AUTHORIZATION_SERVER_URI:}/protocol/openid-connect/tokens
+            user-info-uri: https://${OAUTH_AUTHORIZATION_SERVER_URI:}/protocol/openid-connect/userinfo
+  cloud:
+    deployer:
+      kubernetes:
+        backoff-limit: 1
+        ttl-seconds-after-finished: 100 # this is tmpValue find proper seconds
+    dataflow:
+      features:
+        schedules-enabled: true
+        tasks-enabled: true
+        streams-enabled: false # stream은 UI에서 렌더링하지않게 제외
+      version-info:
+        dependency-fetch:
+          enabled: false
+        dependencies:
+          spring-cloud-dataflow-dashboard:
+            name: Spring Cloud Dataflow UI
+            version: "3.3.0"
+          spring-cloud-dataflow-core:
+            name: Spring Cloud Data Flow Core
+            version: "2.10.0"
+          spring-cloud-dataflow-implementation:
+            name: ${info.app.name}
+            version: ${info.app.version}
+          spring-cloud-dataflow-shell:
+            name: Spring Cloud Data Flow Shell
+            version: "2.10.0"
+            url: "{repository}/org/springframework/cloud/spring-cloud-dataflow-shell/{version}/spring-cloud-dataflow-shell-{version}.jar"
+            checksum-sha1-url: "{repository}/org/springframework/cloud/spring-cloud-dataflow-shell/{version}/spring-cloud-dataflow-shell-{version}.jar.sha1"
+            checksum-sha256-url: "{repository}/org/springframework/cloud/spring-cloud-dataflow-shell/{version}/spring-cloud-dataflow-shell-{version}.jar.sha256"
+      metrics:
+        dashboard:
+          type: none
+      container:
+        registry-configurations:
+          micro-service:
+            registry-host: ${MICRO_ECR_HOST:}
+            authorization-type: awsecr
+            user: ${MICRO_ECR_ACCESS_USER:}
+            secret: ${MICRO_ECR_ACCESS_SECRET:}
+            extra:
+              region: ${MICRO_ECR_REGION:}
+              'registryIds': ${MICRO_ECR_REGISTRY_ID:}
+      task:
+        platform:
+          kubernetes:
+            accounts:
+              scdf-sa:
+                entry-point-style: boot
+                namespace: batch-admin
+                deploymentServiceAccountName: scdf-sa # deploy service account
+                imagePullPolicy: IfNotPresent
+                limits:
+                  cpu: 300m
+                  memory: 1024Mi
+        deployer-properties:
+          group-excludes:
+            - spring.cloud.deployer.kubernetes.fabric8
+          property-excludes:
+            - spring.cloud.deployer.local.maximum-concurrent-tasks
+            - spring.cloud.deployer.kubernetes.maximum-concurrent-tasks
+            - spring.cloud.deployer.cloudfoundry.maximum-concurrent-tasks
+            - spring.cloud.deployer.cloudfoundry.org
+            - spring.cloud.deployer.cloudfoundry.space
+            - spring.cloud.deployer.cloudfoundry.url
+            - spring.cloud.deployer.cloudfoundry.username
+            - spring.cloud.deployer.cloudfoundry.password
+            - spring.cloud.deployer.cloudfoundry.skip-ssl-validation
+      security:
+        authorization:
+          loginUrl: "/"
+          permit-all-paths: "/management/health,/management/info,/authenticate,/security/info,/assets/**,/dashboard/logout-success-oauth.html,/favicon.ico"
+          rules:
+            # About
+            - GET    /about                          => hasRole('ROLE_VIEW')
+            # Audit
+            - GET /audit-records                     => hasRole('ROLE_VIEW')
+            - GET /audit-records/**                  => hasRole('ROLE_VIEW')
+            # Boot Endpoints
+            - GET /management/**                  => hasRole('ROLE_MANAGE')
+            # Apps
+            - GET    /apps                           => hasRole('ROLE_VIEW')
+            - GET    /apps/**                        => hasRole('ROLE_VIEW')
+            - DELETE /apps/**                        => hasRole('ROLE_DESTROY')
+            - POST   /apps                           => hasRole('ROLE_CREATE')
+            - POST   /apps/**                        => hasRole('ROLE_CREATE')
+            - PUT    /apps/**                        => hasRole('ROLE_MODIFY')
+            # Completions
+            - GET /completions/**                    => hasRole('ROLE_VIEW')
+            # Job Executions & Batch Job Execution Steps && Job Step Execution Progress
+            - GET    /jobs/executions                => hasRole('ROLE_VIEW')
+            - PUT    /jobs/executions/**             => hasRole('ROLE_MODIFY')
+            - GET    /jobs/executions/**             => hasRole('ROLE_VIEW')
+            - GET    /jobs/thinexecutions            => hasRole('ROLE_VIEW')
+            # Batch Job Instances
+            - GET    /jobs/instances                 => hasRole('ROLE_VIEW')
+            - GET    /jobs/instances/*               => hasRole('ROLE_VIEW')
+            # Running Applications
+            - GET    /runtime/streams                => hasRole('ROLE_VIEW')
+            - GET    /runtime/streams/**             => hasRole('ROLE_VIEW')
+            - GET    /runtime/apps                   => hasRole('ROLE_VIEW')
+            - GET    /runtime/apps/**                => hasRole('ROLE_VIEW')
+            # Stream Definitions
+            - GET    /streams/definitions            => hasRole('ROLE_VIEW')
+            - GET    /streams/definitions/*          => hasRole('ROLE_VIEW')
+            - GET    /streams/definitions/*/related  => hasRole('ROLE_VIEW')
+            - GET    /streams/definitions/*/applications  => hasRole('ROLE_VIEW')
+            - POST   /streams/definitions            => hasRole('ROLE_CREATE')
+            - DELETE /streams/definitions/*          => hasRole('ROLE_DESTROY')
+            - DELETE /streams/definitions            => hasRole('ROLE_DESTROY')
+            # Stream Deployments
+            - DELETE /streams/deployments/*          => hasRole('ROLE_DEPLOY')
+            - DELETE /streams/deployments            => hasRole('ROLE_DEPLOY')
+            - POST   /streams/deployments/**         => hasRole('ROLE_MODIFY')
+            - GET    /streams/deployments/**         => hasRole('ROLE_VIEW')
+            # Stream Validations
+            - GET /streams/validation/               => hasRole('ROLE_VIEW')
+            - GET /streams/validation/*              => hasRole('ROLE_VIEW')
+            # Stream Logs
+            - GET /streams/logs/**                    => hasRole('ROLE_VIEW')
+            # Task Definitions
+            - POST   /tasks/definitions              => hasRole('ROLE_CREATE')
+            - DELETE /tasks/definitions/*            => hasRole('ROLE_DESTROY')
+            - DELETE /tasks/definitions              => hasRole('ROLE_DESTROY')
+            - GET    /tasks/definitions              => hasRole('ROLE_VIEW')
+            - GET    /tasks/definitions/*            => hasRole('ROLE_VIEW')
+            # Task Executions
+            - GET    /tasks/executions               => hasRole('ROLE_VIEW')
+            - GET    /tasks/executions/*             => hasRole('ROLE_VIEW')
+            - POST   /tasks/executions               => hasRole('ROLE_DEPLOY')
+            - POST   /tasks/executions/*             => hasRole('ROLE_DEPLOY')
+            - DELETE /tasks/executions/*             => hasRole('ROLE_DESTROY')
+            - DELETE /tasks/executions               => hasRole('ROLE_DESTROY')
+            - GET    /tasks/info/*                   => hasRole('ROLE_VIEW')
+            # Task Schedules
+            - GET    /tasks/schedules                => hasRole('ROLE_VIEW')
+            - GET    /tasks/schedules/*              => hasRole('ROLE_VIEW')
+            - GET    /tasks/schedules/instances      => hasRole('ROLE_VIEW')
+            - GET    /tasks/schedules/instances/*    => hasRole('ROLE_VIEW')
+            - POST   /tasks/schedules                => hasRole('ROLE_SCHEDULE')
+            - DELETE /tasks/schedules/*              => hasRole('ROLE_SCHEDULE')
+            - DELETE /tasks/schedules                => hasRole('ROLE_SCHEDULE')
+            # Task Platform Account List */
+            - GET    /tasks/platforms                => hasRole('ROLE_VIEW')
+            # Task Validations
+            - GET    /tasks/validation/               => hasRole('ROLE_VIEW')
+            - GET    /tasks/validation/*              => hasRole('ROLE_VIEW')
+            # Task Logs
+            - GET /tasks/logs/*                       => hasRole('ROLE_VIEW')
+            # Task Ctr
+            - GET    /tasks/ctr/*                     => hasRole('ROLE_VIEW')
+            # Tools
+            - POST   /tools/**                       => hasRole('ROLE_VIEW')
+          provider-role-mappings:
+            keycloak:
+              role-mappings:
+                ROLE_CREATE: dataflow.create
+                ROLE_DEPLOY: dataflow.deploy
+                ROLE_DESTROY: dataflow.destroy
+                ROLE_MANAGE: dataflow.manage
+                ROLE_MODIFY: dataflow.modify
+                ROLE_SCHEDULE: dataflow.schedule
+                ROLE_VIEW: dataflow.view
+
+logging:
+  level:
+    org.springframework.beans: 'WARN'
+    org.springframework.context: 'WARN'
+    org.springframework.jmx: 'WARN'
+    org.springframework.web: 'WARN'
+    org.springframework.security: 'WARN'
+    org.springframework.integration: 'WARN'
+    org.springframework.boot: 'WARN'
+
+management:
+  endpoints:
+    web:
+      base-path: /management
+      exposure:
+        include: "*"
+  endpoint:
+    info:
+      enabled: true
+
+# Defaults for Springdoc (taken from https://springdoc.org/properties.html)
+springdoc:
+  api-docs:
+    enabled: false
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: false
+    path: /swagger-ui.html
+    disable-swagger-default-url: true
+    config-url: /v3/api-docs/swagger-config
+    validator-url: https://validator.swagger.io/validator
+    oauth2-redirect-url: /swagger-ui/oauth2-redirect.html
