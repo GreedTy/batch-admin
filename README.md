@@ -40,7 +40,7 @@ curl http://localhost:9393/apps/task/등록할 앱명 -i -X POST \
 curl 'http://localhost:9393/tasks/definitions' -i -X POST \
 -d 'name=등록된 앱명&definition=등록할 Task정의&description='
 ```
-3. Scheduler Registration (properties&arguments에 대해서 자세한 사항은 담당자에게 문의)
+3. Scheduler Registration
 ```
 curl 'http://localhost:9393/tasks/schedules' -i -X POST \
 -d 'scheduleName=등록할 스케줄러명&taskDefinitionName=등록된 Task정의명&platform=scdf-sa&properties=scheduler.cron.expression%3D*+1+*+*+*&arguments='
